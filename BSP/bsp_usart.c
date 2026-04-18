@@ -1,0 +1,228 @@
+#include "bsp_usart.h"
+#include <string.h>
+#include <stddef.h>
+#include <stdlib.h>
+
+
+
+/* uart实例数组，所有注册了uart的模块信息会被保存在这里 */
+static uint8_t idx = 0;
+static Uart_Instance_t *Usart_Device[DEVICE_UART_CNT] = {NULL};
+
+static uint8_t Uart_Rx_Idle_Callback(Uart_Instance_t *uart_instance);
+static uint8_t Uart_Rx_IT_Callback(Uart_Instance_t *uart_instance);
+static uint8_t Uart_Deinit(Uart_Instance_t **uart_instance);
+
+
+Uart_Instance_t* Uart_Register(uart_package_t *uart_config)
+{   
+    if(uart_config == NULL)
+    {
+        return NULL;   
+    }
+    
+    if(idx >= DEVICE_UART_CNT)
+    {
+        /* 注册设备已经太多了！ */
+        return NULL;
+    }
+    for(uint8_t i = 0 ; i < idx ; i++)
+    {
+        if(uart_config->uart_handle == Usart_Device[i]->uart_package.uart_handle)
+        {
+            return NULL;
+        }
+    }
+
+    // 经过上面的检查，可以进行注册了！
+    Uart_Instance_t *uart_instance = (Uart_Instance_t *)pvPortMalloc(sizeof(Uart_Instance_t));// 为uart实例分配内存
+
+    /* 为什么使用pvPortMalloc，动态创建，这样你在函数内部能管理的东西就更多了 */
+    if(uart_instance == NULL)
+    {
+        return NULL;
+    }
+    memset(uart_instance,0,sizeof(Uart_Instance_t));// 初始化uart实例
+
+    /* 挂载串口包结构体 */
+    
+    memset(uart_config->rx_buffer,0,uart_config->rx_buffer_size);// 清空接收缓存
+    uart_instance->uart_package = *uart_config;
+
+    uart_instance->Uart_Deinit = Uart_UnRegister;// 挂载注销函数
+
+    /* hal库硬件设置 */
+    if(uart_instance->uart_package.IT_CHOOSE == 0)
+    {
+        __HAL_UART_CLEAR_IDLEFLAG(uart_instance->uart_package.uart_handle);// 清除UART的空闲中断标志位
+        __HAL_UART_ENABLE_IT(uart_instance->uart_package.uart_handle, UART_IT_IDLE);// 使能UART的空闲中断
+        HAL_UART_Receive_DMA(uart_instance->uart_package.uart_handle, uart_instance->uart_package.rx_buffer, uart_instance->uart_package.rx_buffer_size);// 启动DMA接收
+    }
+    if (uart_instance->uart_package.IT_CHOOSE == 1)
+    {
+        /* 普通中断模式下按字节接收，不启用IDLE中断以避免空闲线噪声反复触发 */
+        HAL_UART_Receive_IT(uart_instance->uart_package.uart_handle,
+                            uart_instance->uart_package.rx_buffer,
+                            uart_instance->uart_package.rx_buffer_size);
+    }
+    /* 将实例添加到数组中 */
+    Usart_Device[idx++] = uart_instance;
+    // 注册成功，返回实例
+    return uart_instance;
+}
+
+
+uint8_t Uart_Receive_Handler(Uart_Instance_t *uart_instance)
+{
+    if(uart_instance == NULL)
+    {
+        return 0;
+    }
+
+    /* 检查UART的空闲中断标志位是否置位 */
+    if(__HAL_UART_GET_FLAG(uart_instance->uart_package.uart_handle, UART_FLAG_IDLE) != RESET)
+    {
+        Uart_Rx_Idle_Callback(uart_instance);
+    }
+    else
+    {
+        /* UART的空闲中断标志位无置位 */
+        return 0;
+    }
+
+    return 1;
+}
+
+uint8_t XBOX_Receive_Handler(Uart_Instance_t *uart_instance)
+{
+    if(uart_instance == NULL)
+    {
+        return 0;
+    }
+    Uart_Rx_IT_Callback(uart_instance);
+    return 1;
+}
+
+/**
+ * @brief 串口空闲中断回调函数，static
+ * 
+ * @param uart_instance 
+ * @return uint8_t --- 1 :success
+ *                 --- 0 :failed
+ */
+static uint8_t Uart_Rx_Idle_Callback(Uart_Instance_t *uart_instance)
+{
+    if(uart_instance == NULL)
+    {
+        return 0;
+    }
+
+    static uint16_t uart_rx_num;
+
+    /* 清除空闲中断标志位 */
+    __HAL_UART_CLEAR_IDLEFLAG(uart_instance->uart_package.uart_handle);
+
+    /* 停止DMA传输 */
+    HAL_UART_DMAStop(uart_instance->uart_package.uart_handle);
+
+    uart_rx_num = uart_instance->uart_package.rx_buffer_size - ((DMA_Stream_TypeDef*)uart_instance->uart_package.uart_handle->hdmarx->Instance)->NDTR;// 获取接收到的数据长度
+    if(uart_instance->uart_package.uart_callback != NULL)
+    {
+        /* 如果用户自己实现了串口回调中断函数，则调用 */
+        uart_instance->uart_package.uart_callback(uart_instance,uart_rx_num);
+    }
+    else
+    {
+        return 0;
+    }
+
+    /* 重新开启DMA中断 */
+    HAL_UART_Receive_DMA(uart_instance->uart_package.uart_handle, uart_instance->uart_package.rx_buffer, uart_instance->uart_package.rx_buffer_size);// 重新启动DMA传输
+    return 1;
+}
+
+static uint8_t Uart_Rx_IT_Callback(Uart_Instance_t *uart_instance)
+{
+    if(uart_instance->uart_package.uart_callback != NULL)
+    {
+        /* 如果用户自己实现了串口回调中断函数，则调用 */
+        uart_instance->uart_package.uart_callback(uart_instance,1);
+    }
+    HAL_UART_Receive_IT(uart_instance->uart_package.uart_handle, uart_instance->uart_package.rx_buffer, uart_instance->uart_package.rx_buffer_size);
+    return 1;
+}
+
+uint8_t Uart_UnRegister(void *uart_instance)
+{
+    if (uart_instance == NULL)
+    {
+        return 0;
+    }
+    Uart_Instance_t *temp_uart_instance = uart_instance;
+    for (uint8_t i = 0; i < idx; i++)
+    {
+        if (temp_uart_instance == Usart_Device[i])
+        {
+            // 调用 Deinit 函数来清除实例和父类实例
+            Uart_Deinit(&temp_uart_instance);
+
+            // 从数组中移除指定项
+            for (uint8_t j = i; j < idx - 1; j++)
+            {
+                Usart_Device[j] = Usart_Device[j + 1];
+            }
+            Usart_Device[idx - 1] = NULL;
+            idx--;
+
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+
+/**
+ * @brief 
+ * 
+ * @param uart_instance 
+ * @return uint8_t 
+ */
+static uint8_t Uart_Deinit(Uart_Instance_t **uart_instance)
+{
+    if(uart_instance == NULL || *uart_instance == NULL) 
+    {
+        return 0;
+    }
+    Uart_Instance_t *temp_uart_instance = *uart_instance;
+    
+    /* 删除uart->package */
+    /* 规定uart->package必须将其生命域锁在任务函数中，所以不能对这块内存进行释放，需要操作的就只有将函数置空 */
+
+    temp_uart_instance->Uart_Deinit = NULL;
+    /* 删除uart实例 */
+    vPortFree(temp_uart_instance);
+    *uart_instance = NULL;
+    return 1;
+}
+
+
+uint8_t Uart_Tx_By_Blocking(Uart_Tx_Package_t tx_package)
+{
+    HAL_UART_Transmit(tx_package.uart_handle, tx_package.tx_buffer, tx_package.tx_buffer_size, 20);
+    return 1;
+}
+
+
+uint8_t Uart_Tx_By_It(Uart_Tx_Package_t tx_package)
+{
+    HAL_UART_Transmit_IT(tx_package.uart_handle, tx_package.tx_buffer, tx_package.tx_buffer_size);
+    return 1;
+}
+
+
+uint8_t Uart_Tx_By_DMA(Uart_Tx_Package_t tx_package)
+{
+    HAL_UART_Transmit_DMA(tx_package.uart_handle, tx_package.tx_buffer, tx_package.tx_buffer_size);
+    return 1;
+}
