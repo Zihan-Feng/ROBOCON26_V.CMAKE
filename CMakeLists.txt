@@ -58,10 +58,14 @@ endfunction()
 #递归添加用户源文件
 file(GLOB_RECURSE SOURCES
     "APP/*.c"
+    "APP/*.cpp"
     "BSP/*.c"
+    "BSP/*.cpp"
     "Module/*.c"
     "Module/*.cpp"
     "APP/*.cpp"
+    "Algorithm/*.c"
+    "Algorithm/*.cpp"
 )
 
 # Add sources to executable
@@ -74,7 +78,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 include_sub_directories_recursively(${CMAKE_SOURCE_DIR}/APP)
 include_sub_directories_recursively(${CMAKE_SOURCE_DIR}/BSP)
 include_sub_directories_recursively(${CMAKE_SOURCE_DIR}/Module)
-
+include_sub_directories_recursively(${CMAKE_SOURCE_DIR}/Algorithm)
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
@@ -83,6 +87,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
+    # DEBUG_ARM
 )
 
 # Remove wrong libob.a library dependency when using cpp files

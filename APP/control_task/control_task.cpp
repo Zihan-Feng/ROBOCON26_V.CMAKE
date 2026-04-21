@@ -1,56 +1,85 @@
+/**
+ * @file control_task.cpp
+ * @author 大帅将军
+ * @brief 控制任务，遥控/上位机 接口都接入到此，解析后向其他任务发布可能的控制指令
+ * @version 0.1
+ * @date 2026-04-21
+ *
+ * @copyright Copyright (c) 2026
+ *
+ * @attention :
+ * @note :
+ * @versioninfo :
+ */
 #include "control_task.h"
-#include "data_type.h"
-#include "topics.h"
-#include <cstdint>
+#include "topic_pool.h"
+#include "topics.hpp"
+#include "bsp_usart.h"
+#include "tracking.h"
 
-Uart_Instance_t *xbox_uart_instance = NULL;
-extern uart_package_t xbox_uart_package;
-osThreadId_t Control_TaskHandle;
+osThreadId_t ControlTaskHandle;
 
-/* 控制信息发布 */
-Publisher *ctrl_pub;
-pub_Control_Data ctrl_data;
+// 发布底盘控制指令
+TypedTopicPublisher<pub_chassis_cmd> chassis_data_pub("chassis_cmd");
+pub_chassis_cmd chassis_cmd{};
 
 /* 订阅xbox遥控控制信息 */
-Subscriber *xbox_data_sub;
-pub_Xbox_Data xbox_chassis_data;
+static TypedTopicSubscriber<pub_Xbox_Data> control_xbox_sub("xbox",8);
+pub_Xbox_Data control_xbox_cmd{};
 
+// 处理xbox数据，处理为底盘控制指令
 void Xbox_Data_Process()
 {
-  ctrl_data.linear_x = (int)(xbox_chassis_data.joyLHori - 32767) / 32767.0f * MAX_VELOCITY;
-  ctrl_data.linear_y = -(int)(xbox_chassis_data.joyLVert - 32767) / 32767.0f * MAX_VELOCITY;
-  ctrl_data.Omega = (int)(xbox_chassis_data.joyRHori - 32767) / 32767.0f * MAX_VELOCITY;
-  ctrl_data.Status = 1;
-  ctrl_data.Move = 0;
-  ctrl_data.ctrl = 0;
+  if (ABS(control_xbox_cmd.joyLHori - 32767) > 2000)
+  {
+    chassis_cmd.linear_x_ = (int)(control_xbox_cmd.joyLHori - 32767) / 32767.0f * MAX_VELOCITY;
+  }
+  else
+  {
+    chassis_cmd.linear_x_ = 0.0f;
+  }
+
+  if (ABS(control_xbox_cmd.joyLVert - 32767) > 2000)
+  {
+    chassis_cmd.linear_y_ = -(int)(control_xbox_cmd.joyLVert - 32767) / 32767.0f * MAX_VELOCITY;
+  }
+  else
+  {
+    chassis_cmd.linear_y_ = 0.0f;
+  }
+
+  if (ABS(control_xbox_cmd.joyRHori - 32767) > 2000)
+  {
+    chassis_cmd.omega_ = (int)(control_xbox_cmd.joyRHori - 32767) / 32767.0f * MAX_VELOCITY;
+  }
+  else
+  {
+    chassis_cmd.omega_ = 0.0f;
+  }
 }
 
-void Control_Task(void *argument)
-{
-  /* 创建发布者 */
-  ctrl_pub = register_pub("ctrl_topic");
-  publish_data ctrl_publish_data;
-  /* 创建订阅者 */
-  publish_data xbox_data;
-  xbox_data_sub = register_sub("xbox", 1);
-  portTickType currentTime;
-  currentTime = xTaskGetTickCount();
-    for (;;)
-    {
-        /* 从xbox数据订阅者中获取数据 */
-        xbox_data = xbox_data_sub->get_data(xbox_data_sub);
-        if (xbox_data.len != -1)
-        {
-            /* 将void*数据转换为pub_Xbox_Data类型 */
-            xbox_chassis_data = *(pub_Xbox_Data *)xbox_data.data;
-            /* 处理xbox数据，生成控制数据 */
-            Xbox_Data_Process();
-            /* 发布控制数据 */
-            ctrl_publish_data.data = (uint8_t *)&ctrl_data;
-            ctrl_publish_data.len = sizeof(pub_Control_Data);
-            ctrl_pub->publish(ctrl_pub,ctrl_publish_data);
-        }
-        vTaskDelayUntil(&currentTime, 5);
-        // vTaskDelay(5);
+void controlInit() { 
+  if (!chassis_data_pub.IsValid()) {
+    // 发布者初始化失败
+    return;
+  }
+  if (!control_xbox_sub.IsValid()) {
+    // 订阅失败
+    return;
+  }
+}
+
+void controlTask(void *argument) {
+  TickType_t currentTime = xTaskGetTickCount();
+
+  controlInit();
+  for (;;) {
+    
+    /* 从xbox数据订阅者中获取数据 */
+    if (control_xbox_sub.TryGet(&control_xbox_cmd)) {
+      Xbox_Data_Process();
+      chassis_data_pub.Publish(chassis_cmd);
     }
+    vTaskDelayUntil(&currentTime, 5);
+  }
 }

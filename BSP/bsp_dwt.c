@@ -1,3 +1,16 @@
+/**
+ * @file bsp_dwt.c
+ * @author 大帅将军 
+ * @brief DWT周期计数器的封装，提供高精度的时间测量和延时功能
+ * @version 0.1
+ * @date 2026-04-21
+ *
+ * @copyright Copyright (c) 2026
+ *
+ * @attention :
+ * @note :
+ * @versioninfo :
+ */
 #include "bsp_dwt.h"
 
 static DWT_Typedef SysTime;

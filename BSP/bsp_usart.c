@@ -1,3 +1,16 @@
+/**
+ * @file bsp_usart.c
+ * @author Keten 
+ * @brief 串口设备抽象层，提供串口注册、接收处理、注销等功能
+ * @version 0.1
+ * @date 2026-04-21
+ *
+ * @copyright Copyright (c) 2026
+ *
+ * @attention :
+ * @note :
+ * @versioninfo :
+ */
 #include "bsp_usart.h"
 #include <string.h>
 #include <stddef.h>

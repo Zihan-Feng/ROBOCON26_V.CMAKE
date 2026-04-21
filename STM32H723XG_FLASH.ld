@@ -67,8 +67,8 @@ FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 1024K
 _estack = ORIGIN(DTCMRAM) + LENGTH(DTCMRAM);    /* end of RAM */
 _sstack = _estack - _Min_Stack_Size;
 /* Generate a link error if heap and stack don't fit into RAM */
-_Min_Heap_Size = 0x200;      /* required amount of heap  */
-_Min_Stack_Size = 0x400; /* required amount of stack */
+_Min_Heap_Size = 0x1000;      /* required amount of heap  */
+_Min_Stack_Size = 0x1500; /* required amount of stack */
 
 /* Define output sections */
 SECTIONS
@@ -97,6 +97,19 @@ SECTIONS
     . = ALIGN(4);
     _etext = .;        /* define a global symbols at end of code */
   } >FLASH
+
+  /* Critical hot functions executed from ITCM (load from FLASH at startup) */
+  .itcm_text :
+  {
+    . = ALIGN(4);
+    _sitcm = .;
+    *(.itcm_text)
+    *(.itcm_text*)
+    . = ALIGN(4);
+    _eitcm = .;
+  } >ITCMRAM AT> FLASH
+
+  _siitcm = LOADADDR(.itcm_text);
 
   /* Constant data goes into FLASH */
   .rodata :
@@ -226,6 +239,14 @@ SECTIONS
       PROVIDE( __bss_end = .);
   } >DTCMRAM
   PROVIDE( __non_tls_bss_start = ADDR(.bss) );
+
+  /* DMA buffers must not be placed in DTCMRAM (DMA inaccessible on H7). */
+  .dma_buffer (NOLOAD) : ALIGN(32)
+  {
+    *(.dma_buffer)
+    *(.dma_buffer*)
+    . = ALIGN(32);
+  } >RAM_D2
 
   PROVIDE( __bss_start = __tbss_start );
   PROVIDE( __bss_size = __bss_end - __bss_start );

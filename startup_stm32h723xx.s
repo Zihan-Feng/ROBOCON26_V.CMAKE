@@ -65,6 +65,23 @@ Reset_Handler:
 /* Call the clock system initialization function.*/
   bl  SystemInit
 
+/* Copy ITCM text section from flash to ITCM RAM */
+  ldr r0, =_sitcm
+  ldr r1, =_eitcm
+  ldr r2, =_siitcm
+  movs r3, #0
+  b LoopCopyItcmInit
+
+CopyItcmInit:
+  ldr r4, [r2, r3]
+  str r4, [r0, r3]
+  adds r3, r3, #4
+
+LoopCopyItcmInit:
+  adds r4, r0, r3
+  cmp r4, r1
+  bcc CopyItcmInit
+
 /* Copy the data segment initializers from flash to SRAM */
   ldr r0, =_sdata
   ldr r1, =_edata

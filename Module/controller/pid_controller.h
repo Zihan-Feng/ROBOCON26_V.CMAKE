@@ -1,16 +1,16 @@
 /**
-  ******************************************************************************
-  * @file	 controller.h
-  * @author  Wang Hongxi
-  * @author  Zhang Hongyu (fuzzy pid)
-  * @version V1.1.3
-  * @date    2021/7/3
-  * @brief   
-  ******************************************************************************
-  * @attention 
-  *
-  ******************************************************************************
-  */
+ * @file pid_controller.c
+ * @author 大帅将军
+ * @brief PID控制器实现
+ * @version 0.1
+ * @date 2026-04-21
+ *
+ * @copyright Copyright (c) 2026
+ *
+ * @attention :
+ * @note :
+ * @versioninfo :
+ */
 
 #ifndef PID_CONTROLLER_H 
 #define PID_CONTROLLER_H 
@@ -30,6 +30,12 @@ extern "C"{
 
 #ifndef abs
 #define abs(x) ((x > 0) ? x : -x)
+#endif
+
+#if defined(__GNUC__)
+#define PID_ITCM_FUNC __attribute__((section(".itcm_text"), noinline))
+#else
+#define PID_ITCM_FUNC
 #endif
 
 /******************************* PID CONTROL *********************************/
@@ -90,6 +96,7 @@ typedef struct PID_T
     float Eriler_Err;// 上上次的error
     float Last_ITerm;
 
+
     float Pout;
     float Iout;
     float Dout;
@@ -125,7 +132,7 @@ typedef struct PID_T
 void PID_Init(PID_t *pid);
 
 
-float PID_Calculate(PID_t *pid, float measure, float ref);
+PID_ITCM_FUNC float PID_Calculate(PID_t *pid, float measure, float ref);
 
 void PID_Reset(PID_t *pid);
 

@@ -1,5 +1,20 @@
+/**
+ * @file pid_controller.c
+ * @author 大帅将军
+ * @brief PID控制器实现
+ * @version 0.1
+ * @date 2026-04-21
+ *
+ * @copyright Copyright (c) 2026
+ *
+ * @attention :
+ * @note :
+ * @versioninfo :
+ */
 #include "pid_controller.h"
-
+// #include <cstdlib>
+float aaa = 0.0f;
+float bbb = 0.0f;
 /******************************* PID CONTROL *********************************/
 // PID优化环节函数声明
 static void f_Feedforward(PID_t *pid);                  // 前馈控制
@@ -42,7 +57,7 @@ void PID_Init(PID_t *pid)
     pid->Output = 0;
 }// 误差计算
 
-float PID_Calculate(PID_t *pid, float measure, float ref)
+PID_ITCM_FUNC float PID_Calculate(PID_t *pid, float measure, float ref)
 {
     uint8_t use_increment_output = 0;
     uint8_t use_feedforward = 0;
@@ -100,12 +115,12 @@ float PID_Calculate(PID_t *pid, float measure, float ref)
         if (pid->Improve & Integral_Limit)
             f_Integral_Limit(pid);
 
-        pid->Iout += pid->ITerm;// 计算积分项
+        pid->Iout += pid->ITerm;// 仅用于积分状态观测与限幅
 
         if (use_increment_output && use_feedforward)
-            pid->Output = pid->Pout + pid->Iout + pid->Dout + pid->Last_Output + pid->FFout;// 计算输出项
+            pid->Output = pid->Pout + pid->ITerm + pid->Dout + pid->Last_Output + pid->FFout;// 计算输出项
         else if (use_increment_output)
-            pid->Output = pid->Pout + pid->Iout + pid->Dout + pid->Last_Output;// 计算输出项
+            pid->Output = pid->Pout + pid->ITerm + pid->Dout + pid->Last_Output;// 计算输出项
         else if (use_feedforward)
             pid->Output = pid->Pout + pid->Iout + pid->Dout + pid->FFout;// 计算输出项
         else
@@ -174,10 +189,10 @@ static void f_Changing_Integration_Rate(PID_t *pid)
     {
         // 积分呈累积趋势
         // Integral still increasing
-        if (abs(pid->Err) <= pid->CoefB)
+        if (fabsf(pid->Err) <= pid->CoefB)
             return; // Full integral 全速积分
-        if (abs(pid->Err) <= (pid->CoefA + pid->CoefB))
-            pid->ITerm *= (pid->CoefA - abs(pid->Err) + pid->CoefB) / pid->CoefA;// 变速积分 CoefB < err <= CoefA + CoefB
+        if (fabsf(pid->Err) <= (pid->CoefA + pid->CoefB))
+            pid->ITerm *= (pid->CoefA - fabsf(pid->Err) + pid->CoefB) / pid->CoefA;// 变速积分 CoefB < err <= CoefA + CoefB
         else
             // 误差较大，停止积分，避免积分饱和过冲
             pid->ITerm = 0;
@@ -186,11 +201,14 @@ static void f_Changing_Integration_Rate(PID_t *pid)
 
 static void f_Integral_Limit(PID_t *pid)
 {
-    static float temp_Output, temp_Iout;// 存储临时输出和积分项
+    float temp_Output, temp_Iout;// 存储临时输出和积分项
     temp_Iout = pid->Iout + pid->ITerm;
-    temp_Output = pid->Pout + pid->Iout + pid->Dout;
+    if (pid->Improve & IMCREATEMENT_OF_OUT)
+        temp_Output = pid->Pout + pid->ITerm + pid->Dout + pid->Last_Output;
+    else
+        temp_Output = pid->Pout + pid->Iout + pid->Dout;
     // 抗积分饱和
-    if (abs(temp_Output) > pid->MaxOut)
+    if (fabsf(temp_Output) > pid->MaxOut)
     {
         if (pid->Err * pid->Iout > 0)
         {
@@ -217,7 +235,7 @@ static void f_Derivative_On_Measurement(PID_t *pid)
     // 是否使用增量式pid
     if(pid->Improve & IMCREATEMENT_OF_OUT)
     {
-        pid->Dout = pid->Kd * (pid->Measure + pid->Eriler_Measure - 2 * pid->Last_Measure) / pid->dt;// 微分先行是计算测量值的变化率
+        pid->Dout = -pid->Kd * (pid->Measure + pid->Eriler_Measure - 2 * pid->Last_Measure) / pid->dt;// 微分先行是计算测量值的变化率
     }
     else
         pid->Dout = pid->Kd * (pid->Last_Measure - pid->Measure) / pid->dt;// 微分先行是计算测量值的变化率
@@ -270,7 +288,7 @@ static void f_Proportion_Limit(PID_t *pid)
 static void f_PID_ErrorHandle(PID_t *pid)
 {
     /*Motor Blocked Handle*/
-    if (pid->Output < pid->MaxOut * 0.001f || fabsf(pid->Ref) < 0.0001f)
+    if (fabsf(pid->Output) < pid->MaxOut * 0.001f || fabsf(pid->Ref) < 0.0001f)
         return;
 
     if ((fabsf(pid->Ref - pid->Measure) / fabsf(pid->Ref)) > 0.95f)

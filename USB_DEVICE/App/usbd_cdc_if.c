@@ -6,7 +6,7 @@
   * @brief          : Usb device for Virtual Com Port.
   ******************************************************************************
   * @attention
-  *
+  *重写了CDC_Receive_HS函数，接收数据后直接发送到UsbPortC类的实例中进行处理
   * Copyright (c) 2026 STMicroelectronics.
   * All rights reserved.
   *
@@ -22,6 +22,7 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN INCLUDE */
+#include "UsbPortC.h"
 
 /* USER CODE END INCLUDE */
 
@@ -264,6 +265,9 @@ static int8_t CDC_Control_HS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_HS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 11 */
+  if (Buf != NULL && Len != NULL && *Len > 0U) {
+    UsbPort_OnRxFromIsr(Buf, *Len);
+  }
   USBD_CDC_SetRxBuffer(&hUsbDeviceHS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceHS);
   return (USBD_OK);

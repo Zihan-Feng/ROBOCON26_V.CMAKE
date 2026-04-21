@@ -22,6 +22,7 @@
 #include "cmsis_os2.h"
 #include "dma.h"
 #include "fdcan.h"
+#include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
@@ -102,14 +103,15 @@ int main(void)
   MX_FDCAN2_Init();
   MX_FDCAN3_Init();
   MX_USART3_UART_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  MX_USB_DEVICE_Init();//要放前面，因为usb设备调用的HAL tick 来自 TIM6 中断，而 TIM6 中断优先级较低，如果放在后面，可能会因为任务启动阶段有临界区/屏蔽中断导致tick不走进而导致 USB 设备初始化失败。
-  osKernelInitialize();  /* Call init function for freertos objects (in cmsis_os2.c) */
+  // MX_USB_DEVICE_Init();//要放前面，因为usb设备调用的HAL tick 来自 TIM6 中断，而 TIM6 中断优先级较低，如果放在后面，可能会因为任务启动阶段有临界区/屏蔽中断导致tick不走进而导致 USB 设备初始化失败。
+  // osKernelInitialize();  /* Call init function for freertos objects (in cmsis_os2.c) */
   Robot_Init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
-  // osKernelInitialize();  /* Call init function for freertos objects (in cmsis_os2.c) */
+  osKernelInitialize();  /* Call init function for freertos objects (in cmsis_os2.c) */
   MX_FREERTOS_Init();
 
   /* Start scheduler */
