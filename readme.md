@@ -14,4 +14,5 @@ Instruction TCM RAM，紧耦合指令内存，通常放极高实时性的代码
 
 后续的开发流程非常之明了啊，
 要添加外设的话：在module层调用BSP层的固件接口（目前只有串口，而且默认是开dma的）->在module层写功能函数以及封装函数接口->APP成调用你的功能函数
-要添加机器人执行逻辑：在APP层调用所需的功能函数->debug任务书写功能逻辑、状态机->测试->新建个任务文件把内容装里面
+要添加机器人执行逻辑：在APP层调用所需的功能函数->debug任务书写功能逻辑、状态机->测试->新建个任务文件把内容装里面<img width="474" height="474" alt="OIP-C" src="https://github.com/user-attachments/assets/5e33c8d3-9604-4ef6-ae6f-87535e39329d" />
+
