@@ -2,7 +2,9 @@
 
 
 目前是本工具链是生产elf通过ozone进行调试
-现在只能用jlink调试，无线daplink还在尝试
+现在能用jlink，也能用无线daplink，但是无线调试不能看曲线
+怎么用无线dap呢：
+https://bbs.robomaster.com/article/1638268?source=1
 
 目前数据内存默认都存储在DTCMRAM里，其他SRAM基本没用上，如果以后 DTCM 接近满了，可以考虑把不敏感的大数组/缓存挪到 D1/D2，具体怎么改到时再看看
 除此之外，我（fzh）把pid计算放在了ITCMRAM里，我也不知道这能够优化多少
