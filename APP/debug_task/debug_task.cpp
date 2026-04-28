@@ -25,11 +25,25 @@
 #include "pid_controller.h"
 #include "pm20s.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 
+
 osThreadId_t Debug_TaskHandle;
 
+extern DM4310Motor arm4310_motor;
+float arm4310_pos = 0.0f;
+float arm4310_speed = 0.0f;
+bool change = 0;
+extern C620Motor arm3508_motor;
+// PID_t arm3508_motor_speedpid = {
+//   .Kp = 150.0, .Ki = 10.0, .Kd = 0.0, .MaxOut = 12000, .DeadBand = 0.1, .Improve = NONE};
+PID_t arm3508_motor_pospid = {
+  .Kp = 400.0, .Ki = 80.0, .Kd = 20.0, .MaxOut = 12000, .DeadBand = 0.1, .Improve = NONE};
+  float arm3508_pid_out = 0.0f;
+  float arm3508_speed = 0.0f;
+  float target_speed = 0.0f;
 #ifdef DEBUG_ARM
 extern C610Motor arm2006_motor;
 extern C620Motor arm3508_motor;
@@ -63,6 +77,8 @@ PID_t arm3508_motor_pid = {
 
 
 static inline void debugInit(void) {
+  // PID_Init(&arm3508_motor_speedpid);
+  PID_Init(&arm3508_motor_pospid);
 #ifdef DEBUG_ARM
   PID_Init(&arm2006_motor_pid);
   PID_Init(&arm3508_motor_pid);
@@ -133,7 +149,15 @@ void debugTask(void *argument) {
     arm2006_motor.setMotorCmd(arm2006_pid_out);
     arm3508_motor.setMotorCmd(arm3508_pid_out);
   #endif
-
+    // arm3508_pid_out = PID_Calculate(&arm3508_motor_speedpid,
+    //                                 arm3508_motor.getRawCurrentSpeed(),
+    //                                 arm3508_speed);
+    arm3508_pid_out = PID_Calculate(&arm3508_motor_pospid,
+                                    arm3508_motor.getCurrentSumPos(),
+                                    arm3508_speed);
+    // arm3508_motor.setMotorCmd(arm3508_pid_out);
+    if (change == 0)arm4310_motor.posWithSpeedControl(arm4310_pos, arm4310_speed);
+    else arm4310_motor.speedControl(arm4310_speed);  
     vTaskDelayUntil(&currentTime, 1);
   }
 }

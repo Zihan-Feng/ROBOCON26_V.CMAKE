@@ -7,7 +7,12 @@
  *
  * @copyright Copyright (c) 2026
  *
- * @attention :
+ * @attention :因为达妙电机自带mit控制板，只需要发送目标值，电机板会自己根据当前状态进行闭环控制
+ *             所以现在当电机状态切换（模式切换）和目标值变化时，才会调用电机发送can帧，这和大疆电机不同，后者是一直在发送can帧的，
+ *             这样可以一定程度上减少can总线的负载，相应的，你只发一针电机也只返回一针，所以无法得知电机当前状态，就连电机任务是否完成都不知道
+ *             如果你需要得到电机状态，只需要去cmakelist文件把DM_MOTOR_SINGLE这个宏注释掉就行了
+ *             还有一件事，我把达妙电机修改成可以在运动过程中切换模式了，我的发一针可以作为一个保险，例如posWithSpeedControl(1,1)切换到speedControl(1)，是不会发送的因为速度的目标值没有变，
+ *             你需要切换到speedControl(0)再切换回speedControl(1)，这样就会发送can帧了，当然如果你不需要切换模式，那就无所谓了，你也可以理解为这是一坨屎一样的代码逻辑，可能你满脑子都在何意味，但是就这样吧
  * @note :
  * @versioninfo :
  */
@@ -288,7 +293,6 @@ public:
     tx_base_id_ = tx_id;
     ctrl_mode_ = mode;
     target_mode_ = mode;
-    dmMotorEnable();
   }
 
   void init(float reduction_ratio = 10.0f, float max_cmd = 18.0f,
@@ -297,38 +301,176 @@ public:
     setMaxCmd(max_cmd);
     ctrl_mode_ = mode;
     target_mode_ = mode;
+    dmMotorEnable();
   }
 
   void posWithSpeedControl(float pos, float speed) {
+    const bool cs_changed = (target_pos_ != pos) || (target_speed_ != speed);
     target_pos_ = pos;
     target_speed_ = speed;
-    ctrl_mode_ = PosWithSpeed;
+    bool mode_Change = !modeChange(PosWithSpeed, mode_change_state_);
+#ifdef DM_MOTOR_SINGLE
+    if (!cs_changed || manager_ == nullptr || mode_Change) {
+#elif 
+    if (manager_ == nullptr || mode_Change) {
+#endif
+      return;
+    }
+
+    CanBus::ClassicPack pack{};
+    uint8_t len = 0;
+    if (!buildTx(pack.data, len)) {
+      return;
+    }
+
+    pack.id = tx_id_;
+    pack.type = CanBus::Type::STANDARD;
+    (void)manager_->addCanMsg(pack);
   }
 
   void speedControl(float speed) {
+    const bool cs_changed = (target_speed_ != speed);
     target_speed_ = speed;
-    ctrl_mode_ = Speed;
+    bool mode_Change = !modeChange(Speed, mode_change_state_);
+#ifdef DM_MOTOR_SINGLE
+    if (!cs_changed || manager_ == nullptr || mode_Change) {
+#elif 
+    if (manager_ == nullptr || mode_Change) {
+#endif
+      return;
+    }
+
+    CanBus::ClassicPack pack{};
+    uint8_t len = 0;
+    if (!buildTx(pack.data, len)) {
+      return;
+    }
+
+    pack.id = tx_id_;
+    pack.type = CanBus::Type::STANDARD;
+    (void)manager_->addCanMsg(pack);
   }
 
   void mitControl(float speed, float pos, float torque, float Kp, float Kd) {
+    const bool cs_changed = (target_speed_ != speed) || (target_pos_ != pos) || (target_kp_ != Kp) || (target_kd_ != Kd);
     target_speed_ = speed;
     target_pos_ = pos;
     setMotorCmd(torque);
     target_kp_ = Kp;
     target_kd_ = Kd;
-    ctrl_mode_ = Mit;
+    bool mode_Change = !modeChange(Mit, mode_change_state_);
+#ifdef DM_MOTOR_SINGLE
+    if (!cs_changed || manager_ == nullptr || mode_Change) {
+#elif 
+    if (manager_ == nullptr || mode_Change) {
+#endif
+      return;
+    }
+
+    CanBus::ClassicPack pack{};
+    uint8_t len = 0;
+    if (!buildTx(pack.data, len)) {
+      return;
+    }
+
+    pack.id = tx_id_;
+    pack.type = CanBus::Type::STANDARD;
+    (void)manager_->addCanMsg(pack);
   }
 
   void psiControl(float pos, float speed, float current) {
+    const bool cs_changed = (target_pos_ != pos) || (target_speed_ != speed) || (target_current_ != current);
     target_pos_ = pos;
     target_speed_ = speed;
     target_current_ = current;
-    ctrl_mode_ = Psi;
+    bool mode_Change = !modeChange(Psi, mode_change_state_);
+#ifdef DM_MOTOR_SINGLE
+    if (!cs_changed || manager_ == nullptr || mode_Change) {
+#elif 
+    if (manager_ == nullptr || mode_Change) {
+#endif
+      return;
+    }
+
+    CanBus::ClassicPack pack{};
+    uint8_t len = 0;
+    if (!buildTx(pack.data, len)) {
+      return;
+    }
+
+    pack.id = tx_id_;
+    pack.type = CanBus::Type::STANDARD;
+    (void)manager_->addCanMsg(pack);
   }
 
-  void dmMotorEnable(void) { motor_mode_cmd_ = Enable; }
+  void dmMotorEnable(void) {
+    motor_mode_cmd_ = Enable;
 
-  void dmMotorDisable(void) { motor_mode_cmd_ = Disable; }
+    if (manager_ == nullptr) {
+      return;
+    }
+
+    CanBus::ClassicPack pack{};
+    uint8_t len = 0;
+    if (!buildTx(pack.data, len)) {
+      return;
+    }
+
+    pack.id = tx_id_;
+    pack.type = CanBus::Type::STANDARD;
+    (void)manager_->addCanMsg(pack);
+  }
+
+  void dmMotorDisable(void) {
+     motor_mode_cmd_ = Disable; 
+    if (manager_ == nullptr) {
+      return;
+    }
+
+    CanBus::ClassicPack pack{};
+    uint8_t len = 0;
+    if (!buildTx(pack.data, len)) {
+      return;
+    }
+
+    pack.id = tx_id_;
+    pack.type = CanBus::Type::STANDARD;
+    (void)manager_->addCanMsg(pack);
+    }
+
+  void dmMotorChangeMode(void){
+    motor_mode_cmd_ = ChangeMode;
+    if (manager_ == nullptr) {
+      return;
+    }
+
+    CanBus::ClassicPack pack{};
+    uint8_t len = 0;
+    if (!buildTx(pack.data, len)) {
+      return;
+    }
+
+    pack.id = tx_id_;
+    pack.type = CanBus::Type::STANDARD;
+    (void)manager_->addCanMsg(pack);
+  }
+
+  void dmMotorSave(void){
+    motor_mode_cmd_ = SaveConfig;
+    if (manager_ == nullptr) {
+      return;
+    }
+
+    CanBus::ClassicPack pack{};
+    uint8_t len = 0;
+    if (!buildTx(pack.data, len)) {
+      return;
+    }
+
+    pack.id = tx_id_;
+    pack.type = CanBus::Type::STANDARD;
+    (void)manager_->addCanMsg(pack);
+  }
 
   void dmMotorZeroPosition(void) { motor_mode_cmd_ = ZeroPosition; }
 
@@ -348,13 +490,13 @@ public:
 
     if (status == ChangeStep) {
       target_mode_ = mode;
-      motor_mode_cmd_ = ChangeMode;
+      dmMotorChangeMode();
       mode_change_state_ = SaveStep;
       return 0;
     }
 
     if (status == SaveStep) {
-      motor_mode_cmd_ = SaveConfig;
+      dmMotorSave();
       mode_change_state_ = EnableStep;
       return 0;
     }
